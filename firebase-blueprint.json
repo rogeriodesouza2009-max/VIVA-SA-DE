@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "Reading": {
+      "title": "Health Reading",
+      "description": "Individual health measurement entry",
+      "type": "object",
+      "properties": {
+        "glucose": { "type": "number", "description": "Blood glucose level (mg/dL)" },
+        "systolic": { "type": "number", "description": "Systolic blood pressure (mmHg)" },
+        "diastolic": { "type": "number", "description": "Diastolic blood pressure (mmHg)" },
+        "bpm": { "type": "number", "description": "Heart beats per minute" },
+        "period": { "type": "string", "enum": ["JEJUM", "APOS CAFÉ", "APOS ALMOÇO", "APOS JANTAR"], "description": "Meal period of the reading" },
+        "userId": { "type": "string", "description": "UID of the user who owns this reading" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" }
+      },
+      "required": ["glucose", "systolic", "diastolic", "bpm", "userId", "createdAt", "period"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User specific settings and info",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "readings/{readingId}": {
+      "schema": "Reading",
+      "description": "Collection of all health readings"
+    },
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private user profiles"
+    }
+  }
+}

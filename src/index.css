@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+
+  --color-neon-blue: #22d3ee; /* cyan-400 */
+  --color-neon-green: #34d399; /* emerald-400 */
+  --color-neon-yellow: #fbbf24; /* amber-400 */
+  --color-neon-red: #f43f5e; /* rose-500 */
+  
+  --color-bg-dark: #0a0b10;
+  --color-card-dark: #11131c;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-dark text-slate-200 font-sans antialiased;
+  }
+}
+
+.neon-glow-blue {
+  text-shadow: 0 0 15px rgba(34, 211, 238, 0.4);
+}
+
+.neon-border-blue {
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+/* Custom scrollbar for bento look */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-bg-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-800 rounded-full hover:bg-slate-700;
+}

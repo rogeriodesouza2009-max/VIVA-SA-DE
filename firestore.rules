@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations
+    function isValidReading(data) {
+      return data.keys().hasAll(['glucose', 'systolic', 'diastolic', 'bpm', 'userId', 'createdAt', 'period'])
+        && data.keys().size() == 7
+        && data.glucose is number && data.glucose > 0 && data.glucose < 1000
+        && data.systolic is number && data.systolic > 0 && data.systolic < 400
+        && data.diastolic is number && data.diastolic > 0 && data.diastolic < 400
+        && data.bpm is number && data.bpm > 0 && data.bpm < 300
+        && data.period in ['JEJUM', 'APOS CAFÉ', 'APOS ALMOÇO', 'APOS JANTAR']
+        && data.userId == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
+    function isValidProfile(data) {
+      return data.keys().hasAll(['email'])
+        && data.email is string && data.email.size() <= 256
+        && (data.keys().size() <= 5) // DisplayName, AvatarUrl, etc.
+        && (!data.keys().contains('isAdmin'));
+    }
+
+    // Collection Rules
+    match /readings/{readingId} {
+      allow create: if isSignedIn() && isValidId(readingId) && isValidReading(incoming());
+      allow update: if isOwner(existing().userId) 
+                    && isValidReading(incoming())
+                    && incoming().userId == existing().userId
+                    && incoming().createdAt == existing().createdAt;
+      allow delete: if isOwner(existing().userId);
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow create, update: if isOwner(userId) && isValidProfile(incoming());
+      allow get: if isOwner(userId);
+    }
+  }
+}
