@@ -18,7 +18,9 @@ import {
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut, 
-  User 
+  User,
+  setPersistence,
+  browserLocalPersistence 
 } from 'firebase/auth';
 import { 
   Download,
@@ -32,7 +34,11 @@ import {
   History,
   AlertCircle,
   Plus,
-  Trash2
+  Trash2,
+  Info,
+  X,
+  Smartphone,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -50,6 +56,7 @@ export default function App() {
   const [readings, setReadings] = useState<HealthReading[]>([]);
   const [logoClicks, setLogoClicks] = useState(0);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const [highlightPeriods, setHighlightPeriods] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [formData, setFormData] = useState({
@@ -112,16 +119,33 @@ export default function App() {
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
+      // Set persistence to LOCAL so the user stays logged in even after closing the tab
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Login error:", err);
+      if (err.code === 'auth/popup-blocked') {
+        alert("O login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site e tente novamente.");
+      } else if (err.code === 'auth/network-request-failed') {
+        alert("Falha de conexão com a rede. Por favor, verifique sua internet ou tente novamente em alguns instantes.");
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        // Just ignore if user closed it
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Ignore overlapping requests
+      } else {
+        alert("Ocorreu um erro ao tentar entrar. Por favor, verifique sua conexão ou tente novamente mais tarde.");
+      }
     }
   };
 
   const handleLogout = () => signOut(auth);
 
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleLogoClick = () => {
+    // If already in delete mode, 1 click turns it off
     if (isDeleteMode) {
       setIsDeleteMode(false);
       setShowConfirmDelete(false);
@@ -129,10 +153,22 @@ export default function App() {
       return;
     }
     
+    // Clear existing timeout
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+
     const newClicks = logoClicks + 1;
+    
+    // Set 2 second timeout to reset clicks if not finished
+    clickTimeoutRef.current = setTimeout(() => {
+      setLogoClicks(0);
+    }, 2000);
+
     if (newClicks >= 5) {
       setIsDeleteMode(true);
       setLogoClicks(0);
+      if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
     } else {
       setLogoClicks(newClicks);
     }
@@ -252,11 +288,11 @@ export default function App() {
       doc.setFontSize(12);
       doc.setTextColor(100);
       doc.text(`Relatório de Saúde - ${user?.displayName || 'Usuário'}`, 105, 22, { align: 'center' });
-      doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 105, 29, { align: 'center' });
+      doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy    HH:mm")}`, 105, 29, { align: 'center' });
 
       // Table
       const tableData = readings.map(r => [
-        formatDateBR(r.createdAt),
+        formatDateBR(r.createdAt).replace(' ', '    '),
         r.period || '-',
         `${r.glucose} mg/dL`,
         `${r.systolic}/${r.diastolic} mmHg`,
@@ -347,29 +383,58 @@ export default function App() {
       <header className="p-6 flex items-center bg-bg-dark/80 backdrop-blur-md z-10 flex-shrink-0">
         <button 
           onClick={handleLogoClick}
-          className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)] relative flex-shrink-0 active:scale-95 transition-transform"
+          className={cn(
+            "w-12 h-12 rounded-xl flex items-center justify-center border transition-all duration-500 relative flex-shrink-0 active:scale-95",
+            isDeleteMode 
+              ? "bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)]" 
+              : "bg-slate-900 border-slate-800 shadow-lg"
+          )}
         >
           <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
+            key={logoClicks}
+            animate={isDeleteMode ? { 
+              scale: [1, 1.2, 1],
+              rotate: [0, 5, -5, 0]
+            } : { 
+              scale: [1, 1.15, 1] 
+            }}
             transition={{ 
-              duration: 0.8, 
-              repeat: Infinity,
+              duration: isDeleteMode ? 0.4 : (logoClicks > 0 ? 0.2 : 0.8), 
+              repeat: isDeleteMode || logoClicks === 0 ? Infinity : 0,
               ease: "easeInOut"
             }}
             className="flex items-center justify-center relative"
           >
-            <Heart className="w-8 h-8 text-red-500 fill-red-500/20" />
-            <Activity className="w-5 h-5 text-neon-blue absolute" />
+            <Heart className={cn(
+              "w-8 h-8 transition-colors",
+              isDeleteMode ? "text-white fill-white" : "text-neon-red fill-neon-red/20"
+            )} />
+            <Activity className={cn(
+              "w-5 h-5 absolute transition-colors",
+              isDeleteMode ? "text-red-200" : "text-neon-blue"
+            )} />
           </motion.div>
+          
+          {logoClicks > 0 && !isDeleteMode && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-neon-blue rounded-full text-[8px] font-black flex items-center justify-center text-black border border-bg-dark">
+              {logoClicks}
+            </div>
+          )}
         </button>
 
-        <div className="flex-1 text-center px-4">
-          <h1 className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-white uppercase leading-none">
+        <div className="flex-1 text-center px-2">
+          <h1 className="font-display font-bold text-2xl sm:text-3xl tracking-tighter text-white uppercase leading-none">
             VIVA + <span className="text-neon-blue">SAUDE</span>
           </h1>
         </div>
         
-        <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button 
+            onClick={() => setIsHowItWorksOpen(true)}
+            className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+          >
+            <Info className="w-3.5 h-3.5" />
+          </button>
           <div className="relative group">
             {user.photoURL ? (
               <div className="w-10 h-10 rounded-full border-2 border-neon-blue/40 p-0.5 overflow-hidden">
@@ -657,6 +722,102 @@ export default function App() {
           </div>
         </section>
       </main>
+ 
+      {/* How It Works Modal */}
+      <AnimatePresence>
+        {isHowItWorksOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-bg-dark/95 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-neon-blue/10 flex items-center justify-center border border-neon-blue/20">
+                    <Info className="w-5 h-5 text-neon-blue" />
+                  </div>
+                  <h3 className="font-bold text-white uppercase tracking-tight">COMO FUNCIONA</h3>
+                </div>
+                <button 
+                  onClick={() => setIsHowItWorksOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-800 text-slate-400 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-neon-blue/20 flex-shrink-0 flex items-center justify-center text-neon-blue text-xs font-black">1</div>
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase mb-1">Registro de Dados</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">Insira os valores de Glicose, BPM e Pressão (SIS e DIA). Pressione <span className="text-white font-bold">ENTER</span> para pular para o próximo campo rapidamente.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-neon-yellow/20 flex-shrink-0 flex items-center justify-center text-neon-yellow text-xs font-black">2</div>
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase mb-1">Selecione o Período</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">Após preencher todos os dados, escolha o momento da medição (Ex: Jejum ou Após Almoço) para salvar.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-neon-green/20 flex-shrink-0 flex items-center justify-center text-neon-green text-xs font-black">3</div>
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase mb-1">Status Inteligente</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">O app classifica seus resultados automaticamente seguindo normas brasileiras de saúde para sua segurança.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-neon-red/20 flex-shrink-0 flex items-center justify-center text-neon-red text-xs font-black">4</div>
+                    <div>
+                      <h4 className="text-xs font-black text-white uppercase mb-1">Modo Edição (Segredo)</h4>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">Para apagar registros ou limpar o histórico, clique no <span className="text-neon-red font-bold">CORAÇÃO</span> do topo por 5 vezes seguidas e 1 vez para desativar.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-neon-green" />
+                    <span className="text-[10px] font-bold text-white uppercase">Dicas Rápidas</span>
+                  </div>
+                  <ul className="space-y-2">
+                    <li className="flex items-start gap-2 text-[10px] text-slate-500">
+                      <div className="w-1 h-1 rounded-full bg-slate-700 mt-1.5 flex-shrink-0" />
+                      O histórico mostra seus últimos 50 registros.
+                    </li>
+                    <li className="flex items-start gap-2 text-[10px] text-slate-500">
+                      <div className="w-1 h-1 rounded-full bg-slate-700 mt-1.5 flex-shrink-0" />
+                      Gere um PDF para levar na sua consulta médica.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-900 border-t border-slate-800">
+                <button 
+                  onClick={() => setIsHowItWorksOpen(false)}
+                  className="w-full py-4 bg-neon-blue text-black font-black uppercase tracking-widest text-xs rounded-2xl active:scale-95 transition-all shadow-lg shadow-neon-blue/20"
+                >
+                  ENTENDI! VAMOS COMEÇAR
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes float {
